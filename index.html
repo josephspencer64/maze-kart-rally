@@ -136,8 +136,8 @@
     #placeNum{font-size:42px} #minimap{width:112px;height:112px} #itemSlot{top:calc(158px + var(--st));width:62px;height:62px;font-size:32px}
     #soundBtn{top:calc(158px + var(--st));right:calc(86px + var(--sr))} #wayBtn{top:calc(244px + var(--st))}
     #standings{top:calc(88px + var(--st))} #topMid{top:calc(92px + var(--st));left:auto;right:calc(146px + var(--sr));transform:none;padding:3px 10px}
-    #gems{font-size:22px} #lvl{display:none}
-    #bigMsg{font-size:88px} #tipText{font-size:21px} #tip{top:calc(290px + var(--st))}
+    #gems{font-size:22px} #lvl{display:none} #standings{display:none} #itemSlot{display:none} #soundBtn{top:calc(158px + var(--st));right:calc(14px + var(--sr))} #wayBtn{top:calc(214px + var(--st));font-size:13px;padding:6px 10px}
+    #bigMsg{font-size:88px} #tipText{font-size:22px} #tip{top:40%}
     .tbtn{width:80px;height:80px} #tR{left:calc(112px + var(--sl))} #tItem{width:94px;height:94px} #tBack{right:calc(30px + var(--sr));bottom:calc(150px + var(--sb))} #wheel{width:100px;height:100px} #wheel svg{width:76px;height:76px}
   }
   @media (prefers-reduced-motion:reduce){ #itemSlot.full{animation:none} #bigMsg.pop{animation:none} #tip.show{animation:none} }
@@ -154,7 +154,7 @@
     <div class="chip" id="mapWrap"><canvas id="minimap" width="300" height="300"></canvas></div>
     <div class="chip" id="itemSlot"><span id="itemIcon"></span><span class="cnt" id="itemCnt"></span><span class="k" id="itemKey">SPACE</span></div>
     <button class="btn alt smallBtn" id="soundBtn" aria-label="Sound on or off">🔊</button>
-    <button class="btn alt smallBtn" id="wayBtn">🧭 Show me the way</button>
+    <button class="btn alt smallBtn" id="wayBtn" aria-label="Show me the way">🧭 Show me the way</button>
     <div id="bigMsg"></div>
     <div id="tip" hidden><span class="tag">TIP</span><span id="tipText"></span></div>
     <div id="keysHelp">← → steer · ↑ go · ↓ back up · SPACE item · H show the way</div>
@@ -179,6 +179,12 @@
         <button class="pick" data-d="easy">Easy<small>Best to start</small></button>
         <button class="pick" data-d="medium">Medium<small>Faster racers</small></button>
         <button class="pick" data-d="hard">Hard<small>Real race!</small></button>
+      </div>
+      <div class="label">Kart speed</div>
+      <div class="picker three" id="speedPicker">
+        <button class="pick" data-s="slow">Slow<small>Best on a phone</small></button>
+        <button class="pick" data-s="medium">Medium</button>
+        <button class="pick" data-s="fast">Fast</button>
       </div>
       <div class="opts">
         <label><input type="checkbox" id="optGas" checked> Kart drives by itself</label>
@@ -206,6 +212,7 @@
       <div class="label" id="jokeLead">Dead end! Time for a joke.</div>
       <p class="read" id="jokeQ"></p>
       <p class="read ans" id="jokeA" hidden></p>
+      <p class="sub" id="jokeNext" hidden>Now turn around and follow the glowing arrows.</p>
       <div class="btns">
         <button class="btn" id="jokeBtn">Tell me!</button>
         <button class="btn alt" id="hearBtn">🔈 Hear it</button>
@@ -260,6 +267,7 @@ const STONES=[0x8E8B82,0x9C988D,0x7F7C74,0xA8A395,0x88847A];
 
 const store={get(k,d){try{const v=localStorage.getItem('mkr-'+k);return v===null?d:v;}catch(e){return d;}},
   set(k,v){try{localStorage.setItem('mkr-'+k,String(v));}catch(e){}}};
+let speedKey=store.get('speed','slow');
 let playerPick=clampI(+store.get('kart',0),0,3), diffKey=store.get('diff','easy'); if(!DIFFS[diffKey])diffKey='easy';
 function clampI(v,a,b){v=v|0;return v<a?a:v>b?b:v;}
 
@@ -548,7 +556,7 @@ function lightPath(n,dur){clearHelp();let [c,r]=cellOf(player);
     if(g){g.visible=true;g.children.forEach(m=>m.material=helpMat);helpCells.push(g);}c+=DX[d];r+=DZ[d];}
   helpT=dur;}
 function showWay(auto){if(state!=='race'||player.finished)return;if(!auto&&wayCool>0)return;lightPath(9,10);if(!auto){wayCool=12;sfx.pick();}
-  tip('way','Follow the glowing blue arrows!',6,true);}
+}
 $('wayBtn').addEventListener('click',()=>showWay(false));
 
 /* ---------------- progress / ranking ---------------- */
@@ -590,7 +598,7 @@ window.addEventListener('orientationchange',()=>setTimeout(recenterTilt,300));
 function recenterTilt(){if(tiltRaw!==null)tiltZero=tiltRaw;}
 function readTilt(){if(!tiltOn||tiltRaw===null){tiltSteer=0;return 0;}
   let d=tiltRaw-tiltZero;const dead=0.05,full=0.38;               // about 3 degrees of slack, full turn at about 22 degrees
-  d=Math.abs(d)<dead?0:(d-Math.sign(d)*dead)/(full-dead);tiltSteer=clamp(d,-1,1);
+  d=Math.abs(d)<dead?0:(d-Math.sign(d)*dead)/(full-dead);tiltSteer+=(clamp(d,-1,1)-tiltSteer)*0.35;
   $('wheelSvg').style.transform='rotate('+(tiltSteer*90)+'deg)';return tiltSteer;}
 function tiltMsg(t){$('tiltMsg').textContent=t;$('tiltMsg').hidden=!t;}
 async function enableTilt(){
@@ -693,8 +701,8 @@ function giveItem(k){if(k.item)return;const r=Math.random();
   if(r<starChance){k.item='star';k.itemN=1;}else if(r<starChance+0.3){k.item='triple';k.itemN=3;}else{k.item='boost';k.itemN=1;}
   k.itemT=0.6+Math.random()*2;if(k.isPlayer){sfx.pick();updateItemUI();}}
 function useItem(k){if(!k||!k.item||k.finished)return;
-  if(k.item==='star'){k.starT=6;k.speed=Math.max(k.speed,25);if(k.isPlayer)sfx.star();}
-  else{k.boostT=1.3;k.speed=Math.max(k.speed,31);if(k.isPlayer)sfx.boost();}
+  if(k.item==='star'){k.starT=6;k.speed=Math.max(k.speed,PMAX*1.2);if(k.isPlayer)sfx.star();}
+  else{k.boostT=1.3;k.speed=Math.max(k.speed,PMAX*1.5);if(k.isPlayer)sfx.boost();}
   k.itemN--;if(k.itemN<=0)k.item=null;else k.itemT=0.7+Math.random();
   if(k.isPlayer)updateItemUI();}
 function updateItemUI(){const it=player&&player.item;const ic=it?ITEMS[it]:'';$('itemIcon').textContent=ic;$('tItemIcon').textContent=ic;
@@ -715,7 +723,7 @@ function collideKarts(){for(let i=0;i<karts.length;i++)for(let j=i+1;j<karts.len
   const dx=b.x-a.x,dz=b.z-a.z,d2=dx*dx+dz*dz,R=KR*2*0.95;if(d2>=R*R||d2<1e-6)continue;const d=Math.sqrt(d2),p=(R-d)/2;
   a.x-=dx/d*p;a.z-=dz/d*p;b.x+=dx/d*p;b.z+=dz/d*p;
   for(const [s,t] of [[a,b],[b,a]])if(s.starT>0&&t.starT<=0&&t.spinT<=0){t.spinT=1;t.speed*=0.3;
-    if(t.isPlayer){sfx.spin();tip('spin','Bonk! A magic kart bumped you. Keep going!',15);}}}}
+    if(t.isPlayer)sfx.spin();}}}
 
 // AI chooses a direction when it enters a cell. Sometimes it takes a wrong turn, like a real explorer.
 function aiPlan(k,c,r){const nd=nextDir[r][c];if(nd<0)return -1;const back=(k.prevNd+2)%4;
@@ -725,10 +733,11 @@ function aiPlan(k,c,r){const nd=nextDir[r][c];if(nd<0)return -1;const back=(k.pr
     if(o.length){k.detourN=1+Math.floor(Math.random()*3);return o[Math.floor(Math.random()*o.length)];}}
   return nd;}
 
-const PMAX=21;
+const SPEEDS={slow:11,medium:15,fast:20};
+let PMAX=SPEEDS.slow;
 function stepKart(k,dt){
   let steer=0,throttle=0;
-  const maxS=k.starT>0?28:k.boostT>0?33:PMAX;
+  const maxS=k.starT>0?PMAX*1.3:k.boostT>0?PMAX*1.55:PMAX;
   if(k.isPlayer){
     if(!k.finished){const L=keys.arrowleft||keys.a||touchState.l,R=keys.arrowright||keys.d||touchState.r,B=keys.arrowdown||keys.s||touchState.b,U=keys.arrowup||keys.w;
       steer=clamp((L?1:0)-(R?1:0)-readTilt(),-1,1);throttle=B?-1:(U||$('optGas').checked?1:0);}
@@ -759,13 +768,13 @@ function stepKart(k,dt){
   if(throttle>0){if(k.speed<lim)k.speed=Math.min(lim,k.speed+(k.speed<0?40:20)*dt);else k.speed=Math.max(lim,k.speed-25*dt);}
   else if(throttle<0)k.speed=Math.max(-11,k.speed-(k.speed>0?45:18)*dt);
   else k.speed*=Math.pow(0.3,dt);
-  const tf=Math.max(0.45,Math.min(1,Math.abs(k.speed)/8))*(k.speed<-0.5?-1:1);
-  k.ang+=steer*2.35*tf*dt;
+  const tf=Math.max(0.5,Math.min(1,Math.abs(k.speed)/6))*(k.speed<-0.5?-1:1);
+  k.ang+=steer*2.1*tf*dt;
   k.x+=Math.sin(k.ang)*k.speed*dt;k.z+=Math.cos(k.ang)*k.speed*dt;
   collideWalls(k);
   if(k.boostT>0)k.boostT-=dt;if(k.starT>0)k.starT-=dt;if(k.bump>0)k.bump-=dt;if(k.hitT>0)k.hitT-=dt;
-  for(const p of pads){if(Math.abs(k.x-p.x)<3&&Math.abs(k.z-p.z)<3.6&&k.boostT<0.5){k.boostT=0.9;k.speed=Math.max(k.speed,30);
-    if(k.isPlayer){sfx.boost();tipOnce('pad','Whoosh! Blue wind pads make you go super fast.');}}}
+  for(const p of pads){if(Math.abs(k.x-p.x)<3&&Math.abs(k.z-p.z)<3.6&&k.boostT<0.5){k.boostT=0.9;k.speed=Math.max(k.speed,PMAX*1.4);
+    if(k.isPlayer)sfx.boost();}}
   for(const b of boxes){if(b.t<=0&&Math.abs(k.x-b.x)<2.4&&Math.abs(k.z-b.z)<2.4){b.t=5;giveItem(k);}}
   if(k.isPlayer)for(const g of gems){if(!g.got&&Math.abs(k.x-g.x)<2&&Math.abs(k.z-g.z)<2){g.got=true;g.mesh.visible=false;gemCount+=g.v;sfx.gem();$('gems').textContent='💎 '+gemCount;}}
   if(!k.finished){const [c,r]=cellOf(k);if(c===finishCell[0]&&r===finishCell[1]){k.finished=true;k.time=raceTime;finishOrder.push(k);if(k.isPlayer)onPlayerFinish();}}
@@ -835,16 +844,15 @@ function nextJoke(){if(!jokeDeck.length){jokeDeck=JOKES.map((_,i)=>i);for(let i=
   return JOKES[jokeDeck.pop()];}
 function openJoke(){state='joke';setDuck(0.35);curJoke=nextJoke();jokeStage=1;hideTip();jokeCool=14;
   $('jokeLead').textContent=LEADS[Math.floor(Math.random()*LEADS.length)];$('jokeQ').textContent=curJoke[0];
-  $('jokeA').hidden=true;$('jokeA').textContent=curJoke[1];$('jokeBtn').textContent='Tell me!';
+  $('jokeA').hidden=true;$('jokeNext').hidden=true;$('jokeA').textContent=curJoke[1];$('jokeBtn').textContent='Tell me!';
   $('jokeBox').hidden=false;if(engGain)engGain.gain.value=0;sfx.beep();
   setTimeout(()=>$('jokeBtn').focus({preventScroll:true}),50);}
 $('jokeBtn').addEventListener('click',()=>{
-  if(jokeStage===1){jokeStage=2;$('jokeA').hidden=false;$('jokeBtn').textContent='Keep racing!';
+  if(jokeStage===1){jokeStage=2;$('jokeA').hidden=false;$('jokeNext').hidden=false;$('jokeBtn').textContent='Keep racing!';
     if(ac){const t=ac.currentTime;[784,659,784,659,1047].forEach((f,i)=>tone(f,0.1,'triangle',0.1,t+i*0.08));}}
   else{if(window.speechSynthesis)try{speechSynthesis.cancel();}catch(_){}
     $('jokeBox').hidden=true;state='race';setDuck(1);if(document.activeElement)document.activeElement.blur();
-    lightPath(6,8);
-    tip('turn',isTouch?'Turn around! Tap BACK, then follow the glowing arrows.':'Turn around! Press ↓ to back up, then follow the glowing arrows.',1,true);}});
+    lightPath(6,8);}});
 if(!('speechSynthesis' in window))$('hearBtn').hidden=true;
 $('hearBtn').addEventListener('click',()=>{try{speechSynthesis.cancel();const t=jokeStage===1?curJoke[0]:curJoke[0]+' ... '+curJoke[1];
   const u=new SpeechSynthesisUtterance(t);u.rate=0.85;u.pitch=1.1;speechSynthesis.speak(u);}catch(_){}});
@@ -857,29 +865,20 @@ function tip(id,text,cool,force){const last=tipLog[id];
   if(last!==undefined&&(!cool||raceTime-last<cool))return false;if(!force&&(tipCool>0||tipT>0))return false;
   tipLog[id]=raceTime;tipCool=3;showTipText(text);return true;}
 function tipOnce(id,text){return tip(id,text,0);}
+// While he drives, help comes as glowing floor arrows, never text. Text tips only appear when the kart is stopped.
 function coach(dt,c,r,nd){
   const p=player,key=c+','+r;
   if(deadEnds.has(key)&&!seenDead.has(key)){const d=Math.hypot(p.x-(c+.5)*C,p.z-(r+.5)*C);
     if(p.hitT>0||d<3.5){seenDead.add(key);
       if($('optJokes').checked&&jokeCool<=0){openJoke();return;}
-      lightPath(6,8);tip('dead','Dead end! You got the treasure. Now turn around.',8,true);}}
-  if(raceTime>0.5&&raceTime<2&&tiltOn&&isTouch)tipOnce('tilt','Tilt the screen to steer, like a steering wheel!');
-  if(raceTime>1.5&&raceTime<9)tipOnce('start','Drive through the magic crystals to get a power!');
-  if(raceTime>9&&raceTime<11&&arrowMode()==='none')tipOnce('map','Lost? Tap Show me the way. Glowing arrows will help.');
-  if(wrongT>1.6){if(tip('wrong','Wrong way! Turn around. Follow the glowing arrows.',10,true))lightPath(8,9);}
+      lightPath(6,8);}}
+  if(wrongT>1.6&&helpT<=0)lightPath(8,9);
   const pushing=(keys.arrowup||keys.w||$('optGas').checked)&&!(keys.arrowdown||keys.s||touchState.b);
-  stuckT=(Math.abs(p.speed)<2.5&&pushing)?stuckT+dt:0;
-  if(stuckT>1.6){stuckT=0;tip('stuck',isTouch?'Stuck on a wall? Hold BACK to back up. Then turn.':'Stuck on a wall? Hold ↓ to back up. Then turn.',12,true);}
-  itemHeldT=p.item?itemHeldT+dt:0;
-  if(itemHeldT>6){const txt=p.item==='star'?(isTouch?'You have fairy magic! Tap ITEM to shine and go fast.':'You have fairy magic! Press SPACE to shine and go fast.')
-      :(isTouch?'You have a wind dash! Tap ITEM to zoom.':'You have a wind dash! Press SPACE to zoom.');
-    if(tip('item',txt,20))itemHeldT=0;}
-  // not getting closer to the finish for a while = lost
+  stuckT=(Math.abs(p.speed)<2&&pushing)?stuckT+dt:0;
+  if(stuckT>1.8){stuckT=0;tip('stuck',isTouch?'Stuck? Hold BACK to back up.':'Stuck? Hold ↓ to back up.',15,true);}
   const rd=remDist(p);if(p.bestRem===undefined||rd<p.bestRem-C*0.5){p.bestRem=rd;lostT=0;}else lostT+=dt;
-  if(lostT>14){lostT=0;p.bestRem=rd;lightPath(9,10);tip('lost','Lost in the maze? Follow the glowing blue arrows!',0,true);tipLog.lost=undefined;}
-  const place=ranking().indexOf(p)+1;behindT=place===4?behindT+dt:0;
-  if(behindT>10&&tip('behind','You can catch up! Grab crystals and use your wind dash.',25))behindT=0;
-  if(dist[r][c]===2)tipOnce('near','Almost there! Look for the castle gate.');
+  if(lostT>14&&helpT<=0){lostT=0;p.bestRem=rd;lightPath(9,10);}
+  if(tipT>0&&Math.abs(p.speed)>6)hideTip();       // a tip disappears as soon as he drives off
 }
 
 /* ---------------- flow ---------------- */
@@ -892,6 +891,7 @@ function startRace(sameMaze){
   $('gems').textContent='💎 0';$('lvl').textContent='Maze '+(level+1)+' · 0:00.0';
   state='countdown';countT=3.6;raceTime=0;introFrom={p:camera.position.clone(),l:camLook.clone()};
   showBig('3');sfx.beep();lastCount=3;startMusic();setDuck(1);applyTiltUI();if(tiltOn)setTimeout(recenterTilt,2500);
+  if(tiltOn&&isTouch)showTipText('Tilt to steer!');else if(arrowMode()!=='none')showTipText('Follow the yellow arrows!');
 }
 function onPlayerFinish(){const place=finishOrder.indexOf(player)+1;showBig(place===1?'WINNER!':'FINISH!');
   if(place===1)sfx.win();else sfx.go();resultsT=2.2;clearHelp();}
@@ -911,6 +911,8 @@ function showResults(){
   $('nextBtn').focus({preventScroll:true});
 }
 function refreshMenu(){for(const x of document.querySelectorAll('#picker .pick'))x.setAttribute('aria-pressed',String(+x.dataset.i===playerPick));
+  if(!SPEEDS[speedKey])speedKey='slow';PMAX=SPEEDS[speedKey];
+  for(const x of document.querySelectorAll('#speedPicker .pick'))x.setAttribute('aria-pressed',String(x.dataset.s===speedKey));
   for(const x of document.querySelectorAll('#diffPicker .pick'))x.setAttribute('aria-pressed',String(x.dataset.d===diffKey));
   const best=+store.get('best-'+diffKey,0);$('contBtn').hidden=best<1;$('contBtn').textContent='Keep going: Maze '+(best+1);}
 $('startBtn').addEventListener('click',()=>{if(tiltOn)enableTilt();initAudio();if(ac&&ac.resume)ac.resume();level=0;startRace(false);});
@@ -921,6 +923,7 @@ $('menuBtn').addEventListener('click',()=>{$('results').hidden=true;$('menu').hi
 $('picker').innerHTML=RACERS.map((R,i)=>`<button class="pick" data-i="${i}"><span class="sw" style="background:${R.css}"></span>${R.name}</button>`).join('');
 document.addEventListener('pointerdown',()=>{initAudio();if(ac&&ac.resume)ac.resume();startMusic();},{once:true});
 $('picker').addEventListener('click',e=>{const b=e.target.closest('.pick');if(!b)return;playerPick=+b.dataset.i;store.set('kart',playerPick);refreshMenu();buildLevel(0,seed);});
+$('speedPicker').addEventListener('click',e=>{const b=e.target.closest('.pick');if(!b)return;speedKey=b.dataset.s;store.set('speed',speedKey);refreshMenu();});
 $('diffPicker').addEventListener('click',e=>{const b=e.target.closest('.pick');if(!b)return;diffKey=b.dataset.d;store.set('diff',diffKey);refreshMenu();});
 refreshMenu();
 
@@ -940,7 +943,7 @@ function updateHUD(dt){hudT-=dt;if(hudT>0)return;hudT=0.2;
   const rk=ranking();const place=rk.indexOf(player)+1;$('placeNum').textContent=place;$('placeSuf').textContent=ordinal(place);
   $('standings').innerHTML=rk.map((k,i)=>`<div class="row${k.isPlayer?' me':''}"><span class="n">${i+1}</span><span class="dot" style="background:${k.racer.css}"></span>${k.name}</div>`).join('');
   $('lvl').textContent='Maze '+(level+1)+' · '+fmt(player.finished?player.time:raceTime);
-  $('wayBtn').disabled=wayCool>0;$('wayBtn').textContent=wayCool>0?'🧭 Wait '+Math.ceil(wayCool):'🧭 Show me the way';}
+  $('wayBtn').disabled=wayCool>0;const narrow=window.innerWidth<600;$('wayBtn').textContent=wayCool>0?'🧭 '+Math.ceil(wayCool):(narrow?'🧭 Help':'🧭 Show me the way');}
 
 /* ---------------- main loop ---------------- */
 let last=performance.now(),clock=0;
@@ -955,7 +958,7 @@ function frame(now){requestAnimationFrame(frame);let dt=Math.min(0.05,(now-last)
   if(state==='menu'){overview(clock,tp,tl);camPos.lerp(tp,1-Math.exp(-2*dt));camLook.lerp(tl,1-Math.exp(-2*dt));}
   else if(state==='countdown'){countT-=dt;const n=Math.ceil(countT-0.6);
     if(n!==lastCount&&n>=1){lastCount=n;showBig(String(n));sfx.beep();}
-    if(countT<=0.6&&lastCount!==0){lastCount=0;showBig('GO!');sfx.go();state='race';}
+    if(countT<=0.6&&lastCount!==0){lastCount=0;showBig('GO!');sfx.go();state='race';hideTip();}
     const u=clamp(1-(countT-0.6)/3,0,1),e=u*u*(3-2*u);chaseTarget(player,tp,tl);
     camPos.copy(introFrom.p).lerp(tp,e);camLook.copy(introFrom.l).lerp(tl,e);}
   else if(state==='race'){
