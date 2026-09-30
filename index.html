@@ -89,6 +89,11 @@
   #tItem.full{background:var(--gold);}
   #tBack{right:calc(37px + var(--sr));bottom:calc(166px + var(--sb));width:70px;height:70px;}
   #tBack svg{width:34px;height:34px;}
+  #wheel{position:absolute;left:calc(22px + var(--sl));bottom:calc(26px + var(--sb));width:120px;height:120px;pointer-events:auto;
+    border-radius:50%;background:rgba(243,230,196,.85);border:5px solid var(--ink);box-shadow:0 6px 0 var(--ink);display:grid;place-items:center;touch-action:none;}
+  #wheel svg{width:92px;height:92px;transition:transform .05s linear;}
+  #wheel .tlab{bottom:-26px;}
+  #tiltMsg{font-weight:800;font-size:14px;margin:-6px 0 0;max-width:40ch;color:var(--forest);}
   .tlab{position:absolute;bottom:-24px;left:50%;transform:translateX(-50%);font:900 12px var(--body);color:#fff;
     -webkit-text-stroke:3px var(--ink);paint-order:stroke fill;letter-spacing:1px;white-space:nowrap;}
 
@@ -133,7 +138,7 @@
     #standings{top:calc(88px + var(--st))} #topMid{top:calc(92px + var(--st));left:auto;right:calc(146px + var(--sr));transform:none;padding:3px 10px}
     #gems{font-size:22px} #lvl{display:none}
     #bigMsg{font-size:88px} #tipText{font-size:21px} #tip{top:calc(290px + var(--st))}
-    .tbtn{width:80px;height:80px} #tR{left:calc(112px + var(--sl))} #tItem{width:94px;height:94px} #tBack{right:calc(30px + var(--sr));bottom:calc(150px + var(--sb))}
+    .tbtn{width:80px;height:80px} #tR{left:calc(112px + var(--sl))} #tItem{width:94px;height:94px} #tBack{right:calc(30px + var(--sr));bottom:calc(150px + var(--sb))} #wheel{width:100px;height:100px} #wheel svg{width:76px;height:76px}
   }
   @media (prefers-reduced-motion:reduce){ #itemSlot.full{animation:none} #bigMsg.pop{animation:none} #tip.show{animation:none} }
 </style>
@@ -157,6 +162,7 @@
       <div class="tbtn" id="tL" aria-label="Steer left"><svg viewBox="0 0 48 48"><path d="M30 8 L12 24 L30 40" fill="none" stroke="#2B2118" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
       <div class="tbtn" id="tR" aria-label="Steer right"><svg viewBox="0 0 48 48"><path d="M18 8 L36 24 L18 40" fill="none" stroke="#2B2118" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
       <div class="tbtn" id="tBack" aria-label="Back up"><svg viewBox="0 0 48 48"><path d="M24 8 V38 M12 27 L24 40 L36 27" fill="none" stroke="#2B2118" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="tlab">BACK</span></div>
+      <div id="wheel" hidden aria-label="Tilt steering. Tap to re-center."><svg id="wheelSvg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="none" stroke="#2B2118" stroke-width="10"/><circle cx="50" cy="50" r="9" fill="#2B2118"/><path d="M50 50 L50 88 M50 50 L14 38 M50 50 L86 38" stroke="#2B2118" stroke-width="9" stroke-linecap="round"/><circle cx="50" cy="10" r="6" fill="#D94A3D"/></svg><span class="tlab">TAP TO CENTER</span></div>
       <div class="tbtn" id="tItem" aria-label="Use item"><span id="tItemIcon"></span><span class="tlab">ITEM</span></div>
     </div>
   </div>
@@ -179,7 +185,9 @@
         <label><input type="checkbox" id="optSound" checked> Sound</label>
         <label><input type="checkbox" id="optMusic" checked> Music</label>
         <label><input type="checkbox" id="optJokes" checked> Jokes at dead ends</label>
+        <label id="tiltWrap" hidden><input type="checkbox" id="optTilt"> Tilt to steer</label>
       </div>
+      <p class="sub" id="tiltMsg" hidden></p>
       <div class="btns">
         <button class="btn" id="startBtn">Start at Maze 1</button>
         <button class="btn" id="contBtn" hidden>Keep going: Maze 2</button>
@@ -569,6 +577,35 @@ $('tItem').addEventListener('pointercancel',()=>$('tItem').classList.remove('on'
 if(isTouch){$('touch').hidden=false;$('keysHelp').hidden=true;$('itemKey').hidden=true;$('howKeys').hidden=true;}
 document.addEventListener('contextmenu',e=>e.preventDefault());
 
+/* ---------------- tilt steering (phone / tablet motion sensor) ---------------- */
+// Measures how far the screen's left-right line is tipped from level. Works held upright like a steering wheel or held flat.
+let tiltOn=false,tiltRaw=null,tiltZero=0,tiltSteer=0,tiltSeen=false;
+function screenAngle(){const a=(screen.orientation&&typeof screen.orientation.angle==='number')?screen.orientation.angle:(window.orientation||0);return ((a%360)+360)%360;}
+window.addEventListener('deviceorientation',e=>{if(e.beta===null||e.gamma===null)return;tiltSeen=true;
+  const b=e.beta*Math.PI/180,g=e.gamma*Math.PI/180;
+  const gx=Math.sin(g)*Math.cos(b),gy=-Math.sin(b);        // gravity in the device's own frame
+  const a=screenAngle();const sx=a===90?-gy:a===270?gy:a===180?-gx:gx;
+  tiltRaw=Math.asin(clamp(sx,-1,1));});
+window.addEventListener('orientationchange',()=>setTimeout(recenterTilt,300));
+function recenterTilt(){if(tiltRaw!==null)tiltZero=tiltRaw;}
+function readTilt(){if(!tiltOn||tiltRaw===null){tiltSteer=0;return 0;}
+  let d=tiltRaw-tiltZero;const dead=0.05,full=0.38;               // about 3 degrees of slack, full turn at about 22 degrees
+  d=Math.abs(d)<dead?0:(d-Math.sign(d)*dead)/(full-dead);tiltSteer=clamp(d,-1,1);
+  $('wheelSvg').style.transform='rotate('+(tiltSteer*90)+'deg)';return tiltSteer;}
+function tiltMsg(t){$('tiltMsg').textContent=t;$('tiltMsg').hidden=!t;}
+async function enableTilt(){
+  try{if(typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function'){
+      const r=await DeviceOrientationEvent.requestPermission();if(r!=='granted'){setTilt(false);tiltMsg('Tilt was not allowed. Tap the checkbox again and choose Allow.');return;}}}
+  catch(e){setTilt(false);tiltMsg('Tilt steering is not available here.');return;}
+  tiltMsg('Tilt the screen like a steering wheel.');
+  setTimeout(()=>{if(tiltOn&&!tiltSeen){setTilt(false);tiltMsg('This screen is not sending tilt signals. Tilt works when the game is opened from its own web address, like your GitHub page.');}},1500);}
+function setTilt(on){tiltOn=on;$('optTilt').checked=on;store.set('tilt',on?'1':'0');applyTiltUI();}
+function applyTiltUI(){const t=tiltOn&&isTouch;$('wheel').hidden=!t;$('tL').hidden=t;$('tR').hidden=t;}
+$('optTilt').addEventListener('change',e=>{setTilt(e.target.checked);if(e.target.checked)enableTilt();else tiltMsg('');});
+$('wheel').addEventListener('pointerdown',e=>{e.preventDefault();recenterTilt();sfx.beep();});
+if(isTouch&&typeof DeviceOrientationEvent!=='undefined'){$('tiltWrap').hidden=false;if(store.get('tilt','0')==='1'){tiltOn=true;$('optTilt').checked=true;}}
+applyTiltUI();
+
 /* ---------------- audio ---------------- */
 let ac=null,master=null,engOsc=null,engGain=null,engFilter=null,soundOn=true,musicTimer=null,musicStep=0,musicNext=0;
 function initAudio(){if(ac)return;try{ac=new (window.AudioContext||window.webkitAudioContext)();}catch(e){return;}
@@ -656,8 +693,8 @@ function giveItem(k){if(k.item)return;const r=Math.random();
   if(r<starChance){k.item='star';k.itemN=1;}else if(r<starChance+0.3){k.item='triple';k.itemN=3;}else{k.item='boost';k.itemN=1;}
   k.itemT=0.6+Math.random()*2;if(k.isPlayer){sfx.pick();updateItemUI();}}
 function useItem(k){if(!k||!k.item||k.finished)return;
-  if(k.item==='star'){k.starT=6;k.speed=Math.max(k.speed,30);if(k.isPlayer)sfx.star();}
-  else{k.boostT=1.3;k.speed=Math.max(k.speed,38);if(k.isPlayer)sfx.boost();}
+  if(k.item==='star'){k.starT=6;k.speed=Math.max(k.speed,25);if(k.isPlayer)sfx.star();}
+  else{k.boostT=1.3;k.speed=Math.max(k.speed,31);if(k.isPlayer)sfx.boost();}
   k.itemN--;if(k.itemN<=0)k.item=null;else k.itemT=0.7+Math.random();
   if(k.isPlayer)updateItemUI();}
 function updateItemUI(){const it=player&&player.item;const ic=it?ITEMS[it]:'';$('itemIcon').textContent=ic;$('tItemIcon').textContent=ic;
@@ -688,13 +725,13 @@ function aiPlan(k,c,r){const nd=nextDir[r][c];if(nd<0)return -1;const back=(k.pr
     if(o.length){k.detourN=1+Math.floor(Math.random()*3);return o[Math.floor(Math.random()*o.length)];}}
   return nd;}
 
-const PMAX=26;
+const PMAX=21;
 function stepKart(k,dt){
   let steer=0,throttle=0;
-  const maxS=k.starT>0?34:k.boostT>0?40:PMAX;
+  const maxS=k.starT>0?28:k.boostT>0?33:PMAX;
   if(k.isPlayer){
     if(!k.finished){const L=keys.arrowleft||keys.a||touchState.l,R=keys.arrowright||keys.d||touchState.r,B=keys.arrowdown||keys.s||touchState.b,U=keys.arrowup||keys.w;
-      steer=(L?1:0)-(R?1:0);throttle=B?-1:(U||$('optGas').checked?1:0);}
+      steer=clamp((L?1:0)-(R?1:0)-readTilt(),-1,1);throttle=B?-1:(U||$('optGas').checked?1:0);}
   } else if(!k.finished){
     if(k.waitT>0){k.waitT-=dt;}                          // small head start for the player
     else{
@@ -727,7 +764,7 @@ function stepKart(k,dt){
   k.x+=Math.sin(k.ang)*k.speed*dt;k.z+=Math.cos(k.ang)*k.speed*dt;
   collideWalls(k);
   if(k.boostT>0)k.boostT-=dt;if(k.starT>0)k.starT-=dt;if(k.bump>0)k.bump-=dt;if(k.hitT>0)k.hitT-=dt;
-  for(const p of pads){if(Math.abs(k.x-p.x)<3&&Math.abs(k.z-p.z)<3.6&&k.boostT<0.5){k.boostT=0.9;k.speed=Math.max(k.speed,36);
+  for(const p of pads){if(Math.abs(k.x-p.x)<3&&Math.abs(k.z-p.z)<3.6&&k.boostT<0.5){k.boostT=0.9;k.speed=Math.max(k.speed,30);
     if(k.isPlayer){sfx.boost();tipOnce('pad','Whoosh! Blue wind pads make you go super fast.');}}}
   for(const b of boxes){if(b.t<=0&&Math.abs(k.x-b.x)<2.4&&Math.abs(k.z-b.z)<2.4){b.t=5;giveItem(k);}}
   if(k.isPlayer)for(const g of gems){if(!g.got&&Math.abs(k.x-g.x)<2&&Math.abs(k.z-g.z)<2){g.got=true;g.mesh.visible=false;gemCount+=g.v;sfx.gem();$('gems').textContent='💎 '+gemCount;}}
@@ -826,7 +863,8 @@ function coach(dt,c,r,nd){
     if(p.hitT>0||d<3.5){seenDead.add(key);
       if($('optJokes').checked&&jokeCool<=0){openJoke();return;}
       lightPath(6,8);tip('dead','Dead end! You got the treasure. Now turn around.',8,true);}}
-  if(raceTime>1.5&&raceTime<3)tipOnce('start','Drive through the magic crystals to get a power!');
+  if(raceTime>0.5&&raceTime<2&&tiltOn&&isTouch)tipOnce('tilt','Tilt the screen to steer, like a steering wheel!');
+  if(raceTime>1.5&&raceTime<9)tipOnce('start','Drive through the magic crystals to get a power!');
   if(raceTime>9&&raceTime<11&&arrowMode()==='none')tipOnce('map','Lost? Tap Show me the way. Glowing arrows will help.');
   if(wrongT>1.6){if(tip('wrong','Wrong way! Turn around. Follow the glowing arrows.',10,true))lightPath(8,9);}
   const pushing=(keys.arrowup||keys.w||$('optGas').checked)&&!(keys.arrowdown||keys.s||touchState.b);
@@ -853,7 +891,7 @@ function startRace(sameMaze){
   hideTip();tipLog={};tipCool=0;stuckT=0;itemHeldT=0;behindT=0;wrongT=0;lostT=0;jokeCool=0;wayCool=0;
   $('gems').textContent='💎 0';$('lvl').textContent='Maze '+(level+1)+' · 0:00.0';
   state='countdown';countT=3.6;raceTime=0;introFrom={p:camera.position.clone(),l:camLook.clone()};
-  showBig('3');sfx.beep();lastCount=3;startMusic();setDuck(1);
+  showBig('3');sfx.beep();lastCount=3;startMusic();setDuck(1);applyTiltUI();if(tiltOn)setTimeout(recenterTilt,2500);
 }
 function onPlayerFinish(){const place=finishOrder.indexOf(player)+1;showBig(place===1?'WINNER!':'FINISH!');
   if(place===1)sfx.win();else sfx.go();resultsT=2.2;clearHelp();}
@@ -875,8 +913,8 @@ function showResults(){
 function refreshMenu(){for(const x of document.querySelectorAll('#picker .pick'))x.setAttribute('aria-pressed',String(+x.dataset.i===playerPick));
   for(const x of document.querySelectorAll('#diffPicker .pick'))x.setAttribute('aria-pressed',String(x.dataset.d===diffKey));
   const best=+store.get('best-'+diffKey,0);$('contBtn').hidden=best<1;$('contBtn').textContent='Keep going: Maze '+(best+1);}
-$('startBtn').addEventListener('click',()=>{initAudio();if(ac&&ac.resume)ac.resume();level=0;startRace(false);});
-$('contBtn').addEventListener('click',()=>{initAudio();if(ac&&ac.resume)ac.resume();level=+store.get('best-'+diffKey,0);startRace(false);});
+$('startBtn').addEventListener('click',()=>{if(tiltOn)enableTilt();initAudio();if(ac&&ac.resume)ac.resume();level=0;startRace(false);});
+$('contBtn').addEventListener('click',()=>{if(tiltOn)enableTilt();initAudio();if(ac&&ac.resume)ac.resume();level=+store.get('best-'+diffKey,0);startRace(false);});
 $('nextBtn').addEventListener('click',()=>{const place=ranking().indexOf(player)+1;if(place<=3)level++;startRace(false);});
 $('againBtn').addEventListener('click',()=>startRace(true));
 $('menuBtn').addEventListener('click',()=>{$('results').hidden=true;$('menu').hidden=false;state='menu';refreshMenu();});
